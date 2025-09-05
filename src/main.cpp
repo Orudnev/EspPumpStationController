@@ -129,23 +129,38 @@ void applyRelay(bool on) {
 String htmlIndex() {
     String s = R"rawliteral(
 <!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>
-<title>ESP32 Pump Controller</title><style>body{font-family:system-ui;margin:20px}fieldset{margin:12px 0;padding:12px;border-radius:12px;border:1px solid #ccc}input,button{font-size:1rem;padding:6px 10px;margin:4px 0}label{display:block;margin-top:6px}</style></head><body>
-<h1>Контроллер насосной станции</h1><div id='status'>Загрузка...</div>
-<fieldset><legend>Настройки</legend><form id='cfgForm'>
-<label>Pmin <input name='Pmin' type='number' step='0.001'></label>
-<label>Pon <input name='Pon' type='number' step='0.001'></label>
-<label>Poff <input name='Poff' type='number' step='0.001'></label>
-<label>Pdelta <input name='Pdelta' type='number' step='0.001'></label>
-<label>Tf_ms <input name='Tf_ms' type='number' step='1'></label>
-<label>Tbst_ms <input name='Tbst_ms' type='number' step='1'></label>
-<label><input name='useEngineeringUnits' type='checkbox'> SP в инженерных единицах</label>
-<details><summary>Калибровка датчика</summary>
-<label>adcVref <input name='adcVref' type='number' step='0.01'></label>
-<label>kDivider <input name='kDivider' type='number' step='0.0001'></label>
-<label>sensorVmin <input name='sensorVmin' type='number' step='0.001'></label>
-<label>sensorVmax <input name='sensorVmax' type='number' step='0.001'></label>
-<label>pUnitsMax <input name='pUnitsMax' type='number' step='0.01'></label>
-</details><button type='submit'>Сохранить</button></form></fieldset>
+<title>ESP32 Pump Controller</title>
+<style>
+  body{font-family:system-ui;margin:20px}
+  fieldset{margin:12px 0;padding:12px;border-radius:12px;border:1px solid #ccc}
+  input,button{font-size:1rem;padding:6px 10px;margin:4px 0}
+  label{display:block;margin-top:6px}
+</style>
+</head><body>
+  <h1>Контроллер насосной станции</h1>
+  <div id='status'>Нажмите «Обновить», чтобы получить данные</div>
+  <button id="refreshBtn">Обновить</button>
+  
+  <fieldset><legend>Настройки</legend>
+  <form id='cfgForm'>
+    <label>Pmin <input name='Pmin' type='number' step='0.001'></label>
+    <label>Pon <input name='Pon' type='number' step='0.001'></label>
+    <label>Poff <input name='Poff' type='number' step='0.001'></label>
+    <label>Pdelta <input name='Pdelta' type='number' step='0.001'></label>
+    <label>Tf_ms <input name='Tf_ms' type='number' step='1'></label>
+    <label>Tbst_ms <input name='Tbst_ms' type='number' step='1'></label>
+    <label><input name='useEngineeringUnits' type='checkbox'> SP в инженерных единицах</label>
+    <details><summary>Калибровка датчика</summary>
+      <label>adcVref <input name='adcVref' type='number' step='0.01'></label>
+      <label>kDivider <input name='kDivider' type='number' step='0.0001'></label>
+      <label>sensorVmin <input name='sensorVmin' type='number' step='0.001'></label>
+      <label>sensorVmax <input name='sensorVmax' type='number' step='0.001'></label>
+      <label>pUnitsMax <input name='pUnitsMax' type='number' step='0.01'></label>
+    </details>
+    <button type='submit'>Сохранить</button>
+  </form>
+  </fieldset>
+
 <script>
 async function load(){
     const r = await fetch('/status');
@@ -163,26 +178,32 @@ async function load(){
     for (const k of Object.keys(j.cfg)) {
       const el = f.querySelector(`[name=${k}]`);
       if (!el) continue;
-      if (el.type === 'checkbox') el.checked = j.cfg[k]; else el.value = j.cfg[k];
+      if (el.type === 'checkbox') el.checked = j.cfg[k];
+      else el.value = j.cfg[k];
     }
-  }
-  setInterval(load, 1000);
-  load();
-  document.getElementById('cfgForm').addEventListener('submit', async (e)=>{
+}
+
+document.getElementById('refreshBtn').addEventListener('click', load);
+
+document.getElementById('cfgForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
     const obj = {};
     for (const [k,v] of fd.entries()) obj[k] = v;
     obj.useEngineeringUnits = !!e.target.useEngineeringUnits.checked;
-    const r = await fetch('/save', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(obj)});
+    const r = await fetch('/save', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(obj)
+    });
     alert(await r.text());
-  });
-  </script>
+});
+</script>
 )rawliteral";
 
     return s;
 }
-
+ 
 void saveConfig() {
   prefs.begin("pumpctl", false);
   prefs.putFloat("Pmin", cfg.Pmin);
