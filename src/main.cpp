@@ -245,39 +245,101 @@ void loadConfig() {
 void setupWeb() {
   server.on("/", HTTP_GET, [](){ server.send(200, "text/html", htmlIndex()); });
 
-  server.on("/status", HTTP_GET, [](){
-    float SP = readPressureSP();
-    int   SF = readFlowSF();
+  // server.on("/status", HTTP_GET, [](){
+  //   float SP = readPressureSP();
+  //   int   SF = readFlowSF();
 
-    String json = "{";
-    json += "\"SP\":" + String(SP, 5) + ",";
-    json += "\"SF\":" + String(SF) + ",";
-    json += "\"relayOn\":" + String(relayOn ? "true":"false") + ",";
-    json += "\"Tcurr_ms\":" + String((unsigned long)millis()) + ",";
-    json += "\"Tst_ms\":" + String((unsigned long)Tst) + ",";
-    json += "\"units\":\"" + String(cfg.useEngineeringUnits?"eng":"V") + "\",";
-    // Простая текстовая заметка о состоянии
-    String note = inStartWait ? "ожидание Tf после старта [3.2]" : (relayOn ? "насос включен" : "насос выключен");
-    json += "\"stateNote\":\"" + note + "\",";
+  //   String json = "{";
+  //   json += "\"SP\":" + String(SP, 5) + ",";
+  //   json += "\"SF\":" + String(SF) + ",";
+  //   json += "\"relayOn\":" + String(relayOn ? "true":"false") + ",";
+  //   json += "\"Tcurr_ms\":" + String((unsigned long)millis()) + ",";
+  //   json += "\"Tst_ms\":" + String((unsigned long)Tst) + ",";
+  //   json += "\"units\":\"" + String(cfg.useEngineeringUnits?"eng":"V") + "\",";
+  //   // Простая текстовая заметка о состоянии
+  //   String note = inStartWait ? "ожидание Tf после старта [3.2]" : (relayOn ? "насос включен" : "насос выключен");
+  //   json += "\"stateNote\":\"" + note + "\",";
 
-    // Вернуть текущую конфигурацию для автозаполнения формы
-    json += "\"cfg\":{";
-    json += "\"Pmin\":" + String(cfg.Pmin,3) + ",";
-    json += "\"Pon\":" + String(cfg.Pon,3) + ",";
-    json += "\"Poff\":" + String(cfg.Poff,3) + ",";
-    json += "\"Pdelta\":" + String(cfg.Pdelta,3) + ",";
-    json += "\"Tf_ms\":" + String(cfg.Tf_ms) + ",";
-    json += "\"Tbst_ms\":" + String(cfg.Tbst_ms) + ",";
-    json += "\"adcVref\":" + String(cfg.adcVref,2) + ",";
-    json += "\"kDivider\":" + String(cfg.kDivider,4) + ",";
-    json += "\"sensorVmin\":" + String(cfg.sensorVmin,3) + ",";
-    json += "\"sensorVmax\":" + String(cfg.sensorVmax,3) + ",";
-    json += "\"pUnitsMax\":" + String(cfg.pUnitsMax,2) + ",";
-    json += "\"useEngineeringUnits\":" + String(cfg.useEngineeringUnits?"true":"false");
-    json += "}}";
+  //   // Вернуть текущую конфигурацию для автозаполнения формы
+  //   json += "\"cfg\":{";
+  //   json += "\"Pmin\":" + String(cfg.Pmin,3) + ",";
+  //   json += "\"Pon\":" + String(cfg.Pon,3) + ",";
+  //   json += "\"Poff\":" + String(cfg.Poff,3) + ",";
+  //   json += "\"Pdelta\":" + String(cfg.Pdelta,3) + ",";
+  //   json += "\"Tf_ms\":" + String(cfg.Tf_ms) + ",";
+  //   json += "\"Tbst_ms\":" + String(cfg.Tbst_ms) + ",";
+  //   json += "\"adcVref\":" + String(cfg.adcVref,2) + ",";
+  //   json += "\"kDivider\":" + String(cfg.kDivider,4) + ",";
+  //   json += "\"sensorVmin\":" + String(cfg.sensorVmin,3) + ",";
+  //   json += "\"sensorVmax\":" + String(cfg.sensorVmax,3) + ",";
+  //   json += "\"pUnitsMax\":" + String(cfg.pUnitsMax,2) + ",";
+  //   json += "\"useEngineeringUnits\":" + String(cfg.useEngineeringUnits?"true":"false");
+  //   json += "}}";
 
-    server.send(200, "application/json", json);
-  });
+  //   server.send(200, "application/json", json);
+  // });
+
+  server.on("/save", HTTP_POST, [](){
+    // Ожидаем JSON в теле запроса
+    if (!server.hasArg("plain")) { 
+        server.send(400, "text/plain", "no body"); 
+        return; 
+    }
+
+    String body = server.arg("plain");
+
+    // 🔹 Добавляем вывод в Serial
+    Serial.println("=== /save JSON body ===");
+    Serial.println(body);
+    Serial.println("========================");
+
+    // Простейший парсер: ищем по ключевым словам (для компактности без внешних JSON-библиотек)
+    auto getNum = [&](const char* key, float* outF, uint32_t* outU = nullptr){
+      int i = body.indexOf(String("\"") + key + "\"");
+      if (i < 0) return;
+      i = body.indexOf(':', i);
+      if (i < 0) return;
+      int j = body.indexOf(',', i+1); if (j < 0) j = body.indexOf('}', i+1);
+      if (j < 0) return;
+      String v = body.substring(i+1, j);
+      v.trim();
+      if (outF) *outF = v.toFloat();
+      if (outU) *outU = (uint32_t) v.toInt();
+    };
+
+    auto getBool = [&](const char* key, bool* outB){
+      int i = body.indexOf(String("\"") + key + "\"");
+      if (i < 0) return;
+      i = body.indexOf(':', i);
+      if (i < 0) return;
+      int j = body.indexOf(',', i+1); if (j < 0) j = body.indexOf('}', i+1);
+      if (j < 0) return;
+      String v = body.substring(i+1, j);
+      v.trim();
+      *outB = v.indexOf('t') >= 0 || v == "1";
+    };
+
+    getNum("Pmin", &cfg.Pmin);
+    getNum("Pon",  &cfg.Pon);
+    getNum("Poff", &cfg.Poff);
+    getNum("Pdelta", &cfg.Pdelta);
+    getNum("Tf_ms", nullptr, &cfg.Tf_ms);
+    getNum("Tbst_ms", nullptr, &cfg.Tbst_ms);
+    getNum("adcVref", &cfg.adcVref);
+    getNum("kDivider", &cfg.kDivider);
+    getNum("sensorVmin", &cfg.sensorVmin);
+    getNum("sensorVmax", &cfg.sensorVmax);
+    getNum("pUnitsMax", &cfg.pUnitsMax);
+    getBool("useEngineeringUnits", &cfg.useEngineeringUnits);
+
+    // Валидация гистерезиса
+    if (cfg.Pon >= cfg.Poff) cfg.Pon = cfg.Poff * 0.8f;
+    if (cfg.Pmin >= cfg.Pon) cfg.Pmin = cfg.Pon * 0.8f;
+
+    saveConfig();
+    server.send(200, "text/plain", "saved");
+});
+
 
   server.on("/save", HTTP_POST, [](){
     // Ожидаем JSON в теле запроса
